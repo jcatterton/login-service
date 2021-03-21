@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"github.com/dgrijalva/jwt-go"
 	"login-service/model"
 	"time"
@@ -25,7 +24,6 @@ func (ts *TokenService) GenerateToken(username string) (string, error) {
 			Issuer:    ts.Issuer,
 		},
 	}
-	fmt.Println(claims)
 
 	token, err := jwt.NewWithClaims(ts.SigningMethod, claims).SignedString(ts.Signature)
 	if err != nil {
@@ -47,7 +45,6 @@ func (ts *TokenService) ValidateToken(token string) (string, error) {
 		return "", err
 	}
 
-	fmt.Println(parsedToken.Claims)
 	claims, ok := parsedToken.Claims.(*model.CustomClaim)
 	if !ok {
 		return "", errors.New("unable to parse claims")

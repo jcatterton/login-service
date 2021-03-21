@@ -156,7 +156,7 @@ func validateToken(tokenService service.JWTService) http.HandlerFunc {
 		}
 
 		logrus.WithField("username", username).Info("Token successfully validated")
-		respondWithSuccess(w, http.StatusOK, fmt.Sprintf("Token validated for user '%v", username))
+		respondWithSuccess(w, http.StatusOK, fmt.Sprintf("Token validated for user '%v'", username))
 		return
 	}
 }
@@ -172,7 +172,6 @@ func newUser(handler dao.DbHandler, tokenService service.JWTService) http.Handle
 			respondWithError(w, http.StatusBadRequest, "No authorization header found")
 			return
 		} else if (len(tokenHeader) >= 7 && tokenHeader[:7] != "Bearer ") || len(strings.Split(tokenHeader, " ")) != 2 {
-			fmt.Println(strings.HasPrefix("Bearer ", tokenHeader))
 			logrus.Error("Authorization header must be in format 'Bearer <token>'")
 			respondWithError(w, http.StatusBadRequest, "Authorization header must be in format 'Bearer <token>'")
 			return
