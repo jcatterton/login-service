@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"login-service/pkg/producer"
 	"login-service/pkg/service"
 	"net/http"
 	"os"
@@ -67,10 +68,16 @@ func route() (*mux.Router, error) {
 		Signature:     []byte(os.Getenv("SIGNATURE")),
 	}
 
+	p, err := producer.CreateProducer(os.Getenv("BROKER"), os.Getenv("TOPIC"))
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to create producer")
+		return nil, err
+	}
+
 	r.HandleFunc("/health", checkHealth(&dbHandler)).Methods(http.MethodGet)
-	r.HandleFunc("/login", handleLoginRequest(&dbHandler, &jwtService)).Methods(http.MethodPost)
-	r.HandleFunc("/token", validateToken(&jwtService)).Methods(http.MethodPost)
-	r.HandleFunc("/user", newUser(&dbHandler, &jwtService)).Methods(http.MethodPost)
+	r.HandleFunc("/login", handleLoginRequest(&dbHandler, &jwtService, p)).Methods(http.MethodPost)
+	r.HandleFunc("/token", validateToken(&jwtService, p)).Methods(http.MethodPost)
+	r.HandleFunc("/user", newUser(&dbHandler, &jwtService, p)).Methods(http.MethodPost)
 
 	return r, nil
 }
@@ -87,7 +94,7 @@ func checkHealth(handler dao.DbHandler) http.HandlerFunc {
 	}
 }
 
-func handleLoginRequest(handler dao.DbHandler, tokenService service.JWTService) http.HandlerFunc {
+func handleLoginRequest(handler dao.DbHandler, tokenService service.JWTService, p producer.KafkaProducer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		defer closeRequestBody(r)
@@ -109,6 +116,7 @@ func handleLoginRequest(handler dao.DbHandler, tokenService service.JWTService) 
 				logrus.WithError(err).Error("Error retrieving user from database")
 				respondWithError(w, http.StatusInternalServerError, err.Error())
 			}
+			p.Produce("authentication_failure", fmt.Sprintf("authentication failed for user '%v' - user not found", loginRequest.Username), true)
 			return
 		}
 
@@ -116,6 +124,7 @@ func handleLoginRequest(handler dao.DbHandler, tokenService service.JWTService) 
 			err := errors.New("authentication failed")
 			logrus.WithError(err).Error("Unable to authenticate user")
 			respondWithError(w, http.StatusUnauthorized, "Unable to authenticate user")
+			p.Produce("authentication_failure", fmt.Sprintf("authentication failed for user '%v' - invalid credentials", loginRequest.Username), true)
 			return
 		}
 
@@ -132,7 +141,7 @@ func handleLoginRequest(handler dao.DbHandler, tokenService service.JWTService) 
 	}
 }
 
-func validateToken(tokenService service.JWTService) http.HandlerFunc {
+func validateToken(tokenService service.JWTService, p producer.KafkaProducer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer closeRequestBody(r)
 
@@ -152,6 +161,7 @@ func validateToken(tokenService service.JWTService) http.HandlerFunc {
 		if err != nil {
 			logrus.WithError(err).Error("Error validating token")
 			respondWithError(w, http.StatusInternalServerError, err.Error())
+			p.Produce("authentication_failure", fmt.Sprintf("authentication failed - invalid token"), true)
 			return
 		}
 
@@ -161,7 +171,7 @@ func validateToken(tokenService service.JWTService) http.HandlerFunc {
 	}
 }
 
-func newUser(handler dao.DbHandler, tokenService service.JWTService) http.HandlerFunc {
+func newUser(handler dao.DbHandler, tokenService service.JWTService, p producer.KafkaProducer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
 		defer closeRequestBody(r)
@@ -182,6 +192,7 @@ func newUser(handler dao.DbHandler, tokenService service.JWTService) http.Handle
 		if err != nil {
 			logrus.WithError(err).Error("Error validating token")
 			respondWithError(w, http.StatusInternalServerError, err.Error())
+			p.Produce("authentication_failure", "authentication failed - invalid token", true)
 			return
 		}
 
@@ -224,6 +235,7 @@ func newUser(handler dao.DbHandler, tokenService service.JWTService) http.Handle
 
 		logrus.Info("User successfully created")
 		respondWithSuccess(w, http.StatusOK, "User successfully created")
+		p.Produce("user_created", fmt.Sprintf("user '%v' created succesfully", user.Username), false)
 		return
 	}
 }

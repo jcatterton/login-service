@@ -43,12 +43,13 @@ func TestApi_CheckHealth_ShouldReturn200OnSuccess(t *testing.T) {
 func TestApi_HandleLoginRequest_ShouldReturn400IfUnableToDecodeRequestBody(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	req, err := http.NewRequest(http.MethodPost, "/login", ioutil.NopCloser(strings.NewReader("")))
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -56,14 +57,16 @@ func TestApi_HandleLoginRequest_ShouldReturn400IfUnableToDecodeRequestBody(t *te
 func TestApi_HandleLoginRequest_ShouldReturn401IfUnableToFindUser(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	handler.On("GetUser", mock.Anything, mock.Anything).Return(nil, errors.New("mongo: no documents in result"))
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/login", ioutil.NopCloser(strings.NewReader(`{"username": "test", "password": "test"}`)))
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 401, recorder.Code)
 }
@@ -71,14 +74,16 @@ func TestApi_HandleLoginRequest_ShouldReturn401IfUnableToFindUser(t *testing.T) 
 func TestApi_HandleLoginRequest_ShouldReturn500IfErrorSearchingDatabase(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	handler.On("GetUser", mock.Anything, mock.Anything).Return(nil, errors.New("test"))
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/login", ioutil.NopCloser(strings.NewReader(`{"username": "test", "password": "test"}`)))
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 500, recorder.Code)
 }
@@ -86,6 +91,7 @@ func TestApi_HandleLoginRequest_ShouldReturn500IfErrorSearchingDatabase(t *testi
 func TestApi_HandleLoginRequest_ShouldReturn401IfRequestPasswordDoesNotMatchUserPasswordHash(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	mockPassword, err := bcrypt.GenerateFromPassword([]byte("password"), bcrypt.DefaultCost)
 	require.Nil(t, err)
@@ -95,12 +101,13 @@ func TestApi_HandleLoginRequest_ShouldReturn401IfRequestPasswordDoesNotMatchUser
 	}
 
 	handler.On("GetUser", mock.Anything, mock.Anything).Return(&mockUser, nil)
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/login", ioutil.NopCloser(strings.NewReader(`{"username": "test", "password": "test"}`)))
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 401, recorder.Code)
 }
@@ -108,6 +115,7 @@ func TestApi_HandleLoginRequest_ShouldReturn401IfRequestPasswordDoesNotMatchUser
 func TestApi_HandleLoginRequest_ShouldReturn500IfErrorOccursGeneratingToken(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	mockPassword, err := bcrypt.GenerateFromPassword([]byte("test"), bcrypt.DefaultCost)
 	require.Nil(t, err)
@@ -123,7 +131,7 @@ func TestApi_HandleLoginRequest_ShouldReturn500IfErrorOccursGeneratingToken(t *t
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 500, recorder.Code)
 }
@@ -131,6 +139,7 @@ func TestApi_HandleLoginRequest_ShouldReturn500IfErrorOccursGeneratingToken(t *t
 func TestApi_HandleLoginRequest_ShouldReturn200OnSuccess(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	mockPassword, err := bcrypt.GenerateFromPassword([]byte("test"), bcrypt.DefaultCost)
 	require.Nil(t, err)
@@ -146,25 +155,27 @@ func TestApi_HandleLoginRequest_ShouldReturn200OnSuccess(t *testing.T) {
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service))
+	httpHandler := http.HandlerFunc(handleLoginRequest(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 200, recorder.Code)
 }
 
 func TestApi_ValidateToken_ShouldReturn400IfNoAuthorizationHeaderIsFound(t *testing.T) {
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	req, err := http.NewRequest(http.MethodPost, "/token", nil)
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(validateToken(service))
+	httpHandler := http.HandlerFunc(validateToken(service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
 
 func TestApi_ValidateToken_ShouldReturn400IfAuthorizationHeaderIsMalformed(t *testing.T) {
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	req, err := http.NewRequest(http.MethodPost, "/token", nil)
 	require.Nil(t, err)
@@ -172,14 +183,17 @@ func TestApi_ValidateToken_ShouldReturn400IfAuthorizationHeaderIsMalformed(t *te
 	req.Header.Add("Authorization", "test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(validateToken(service))
+	httpHandler := http.HandlerFunc(validateToken(service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
 
 func TestApi_ValidateToken_ShouldReturn500IfErrorValidatingToken(t *testing.T) {
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("", errors.New("test"))
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/token", nil)
 	require.Nil(t, err)
@@ -187,13 +201,15 @@ func TestApi_ValidateToken_ShouldReturn500IfErrorValidatingToken(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(validateToken(service))
+	httpHandler := http.HandlerFunc(validateToken(service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 500, recorder.Code)
 }
 
 func TestApi_ValidateToken_ShouldReturn200OnSuccess(t *testing.T) {
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
 
 	req, err := http.NewRequest(http.MethodPost, "/token", nil)
@@ -202,7 +218,7 @@ func TestApi_ValidateToken_ShouldReturn200OnSuccess(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(validateToken(service))
+	httpHandler := http.HandlerFunc(validateToken(service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 200, recorder.Code)
 }
@@ -210,12 +226,13 @@ func TestApi_ValidateToken_ShouldReturn200OnSuccess(t *testing.T) {
 func TestApi_NewUser_ShouldReturn400IfNoAuthorizationHeaderIsFound(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	req, err := http.NewRequest(http.MethodPost, "/user", nil)
 	require.Nil(t, err)
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -223,6 +240,7 @@ func TestApi_NewUser_ShouldReturn400IfNoAuthorizationHeaderIsFound(t *testing.T)
 func TestApi_NewUser_ShouldReturn400IfAuthorizationheaderIsMalformed(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
 
 	req, err := http.NewRequest(http.MethodPost, "/user", nil)
 	require.Nil(t, err)
@@ -230,7 +248,7 @@ func TestApi_NewUser_ShouldReturn400IfAuthorizationheaderIsMalformed(t *testing.
 	req.Header.Add("Authorization", "test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -238,7 +256,10 @@ func TestApi_NewUser_ShouldReturn400IfAuthorizationheaderIsMalformed(t *testing.
 func TestApi_NewUser_ShouldReturn500IfErrorValidatingToken(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("", errors.New("test"))
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/user", nil)
 	require.Nil(t, err)
@@ -246,7 +267,7 @@ func TestApi_NewUser_ShouldReturn500IfErrorValidatingToken(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 500, recorder.Code)
 }
@@ -254,6 +275,8 @@ func TestApi_NewUser_ShouldReturn500IfErrorValidatingToken(t *testing.T) {
 func TestApi_NewUser_ShouldReturn400IfUnableToDecodeRequestBody(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
 
 	req, err := http.NewRequest(http.MethodPost, "/user", ioutil.NopCloser(strings.NewReader("")))
@@ -262,7 +285,7 @@ func TestApi_NewUser_ShouldReturn400IfUnableToDecodeRequestBody(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -270,6 +293,8 @@ func TestApi_NewUser_ShouldReturn400IfUnableToDecodeRequestBody(t *testing.T) {
 func TestApi_NewUser_ShouldReturn400IfRequestUsernameIsEmpty(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
 
 	req, err := http.NewRequest(http.MethodPost, "/user", ioutil.NopCloser(strings.NewReader(`{"username": ""}`)))
@@ -278,7 +303,7 @@ func TestApi_NewUser_ShouldReturn400IfRequestUsernameIsEmpty(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -286,6 +311,8 @@ func TestApi_NewUser_ShouldReturn400IfRequestUsernameIsEmpty(t *testing.T) {
 func TestApi_NewUser_ShouldReturn400IfRequestPasswordIsEmpty(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
 
 	req, err := http.NewRequest(http.MethodPost, "/user", ioutil.NopCloser(strings.NewReader(`{"username": "test", "password": ""}`)))
@@ -294,7 +321,7 @@ func TestApi_NewUser_ShouldReturn400IfRequestPasswordIsEmpty(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 400, recorder.Code)
 }
@@ -302,6 +329,8 @@ func TestApi_NewUser_ShouldReturn400IfRequestPasswordIsEmpty(t *testing.T) {
 func TestApi_NewUser_ShouldReturn500IfErrorCreatingUser(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	handler.On("AddUser", mock.Anything, mock.Anything).Return(errors.New("test"))
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
 
@@ -311,7 +340,7 @@ func TestApi_NewUser_ShouldReturn500IfErrorCreatingUser(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 500, recorder.Code)
 }
@@ -319,8 +348,11 @@ func TestApi_NewUser_ShouldReturn500IfErrorCreatingUser(t *testing.T) {
 func TestApi_NewUser_ShouldReturn200OnSuccess(t *testing.T) {
 	handler := &mocks.DbHandler{}
 	service := &mocks.JWTService{}
+	producer := &mocks.KafkaProducer{}
+
 	handler.On("AddUser", mock.Anything, mock.Anything).Return(nil)
 	service.On("ValidateToken", mock.Anything).Return("test", nil)
+	producer.On("Produce", mock.Anything, mock.Anything, mock.Anything)
 
 	req, err := http.NewRequest(http.MethodPost, "/user", ioutil.NopCloser(strings.NewReader(`{"username": "test", "password": "test"}`)))
 	require.Nil(t, err)
@@ -328,7 +360,7 @@ func TestApi_NewUser_ShouldReturn200OnSuccess(t *testing.T) {
 	req.Header.Add("Authorization", "Bearer test")
 
 	recorder := httptest.NewRecorder()
-	httpHandler := http.HandlerFunc(newUser(handler, service))
+	httpHandler := http.HandlerFunc(newUser(handler, service, producer))
 	httpHandler.ServeHTTP(recorder, req)
 	require.Equal(t, 200, recorder.Code)
 }

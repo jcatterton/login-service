@@ -7,3 +7,4 @@ coverage:
 mocks:
 	mockery --name=DbHandler --recursive=true --case=underscore --output=./pkg/testhelper/mocks;
 	mockery --name=JWTService --recursive=true --case=underscore --output=./pkg/testhelper/mocks;
+	mockery --name=KafkaProducer --recursive=true --case=underscore --output=./pkg/testhelper/mocks;
