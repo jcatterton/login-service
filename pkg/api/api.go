@@ -161,7 +161,6 @@ func validateToken(tokenService service.JWTService, p producer.KafkaProducer) ht
 		if err != nil {
 			logrus.WithError(err).Error("Error validating token")
 			respondWithError(w, http.StatusInternalServerError, err.Error())
-			p.Produce("authentication_failure", fmt.Sprintf("authentication failed - invalid token"), true)
 			return
 		}
 

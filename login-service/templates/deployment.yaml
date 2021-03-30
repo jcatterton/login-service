@@ -42,3 +42,21 @@ spec:
                                 name: login-service
                                 key: SIGNATURE
                                 optional: false
+                      - name: "BROKER"
+                        valueFrom:
+                            secretKeyRef:
+                                name: login-service
+                                key: BROKER
+                                optional: false
+                      - name: "GROUP_ID"
+                        valueFrom:
+                            secretKeyRef:
+                                name: login-service
+                                key: GROUP_ID
+                                optional: false
+                      - name: "TOPIC"
+                        valueFrom:
+                            secretKeyRef:
+                                name: login-service
+                                key: TOPIC
+                                optional: false
