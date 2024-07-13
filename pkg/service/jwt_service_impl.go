@@ -2,9 +2,10 @@ package service
 
 import (
 	"errors"
-	"github.com/dgrijalva/jwt-go"
 	"login-service/model"
 	"time"
+
+	"github.com/dgrijalva/jwt-go"
 )
 
 type TokenService struct {
@@ -15,12 +16,11 @@ type TokenService struct {
 
 func (ts *TokenService) GenerateToken(username string) (string, error) {
 	t := time.Now()
-	midnight := time.Date(t.Year(), t.Month(), t.Day()+1, 0, 0, 0, 0, t.Location())
 
 	claims := model.CustomClaim{
 		Username: username,
 		StandardClaims: jwt.StandardClaims{
-			ExpiresAt: midnight.UTC().Unix(),
+			ExpiresAt: t.Add(time.Hour * 24).Unix(),
 			Issuer:    ts.Issuer,
 		},
 	}
